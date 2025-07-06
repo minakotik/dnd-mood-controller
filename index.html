@@ -134,9 +134,6 @@
             color: white;
             margin-left: 10px;
         }
-        .hidden {
-            display: none;
-        }
     </style>
 </head>
 <body>
@@ -233,6 +230,18 @@
                 newVideoUrl.value = '';
             });
             
+            // NEW: Volume control function using YouTube's postMessage
+            function setVolume(videoId, volume) {
+                const iframe = document.getElementById(`video-iframe-${videoId}`);
+                if (iframe && iframe.contentWindow) {
+                    iframe.contentWindow.postMessage({
+                        event: 'command',
+                        func: 'setVolume',
+                        args: [volume]
+                    }, 'https://www.youtube.com');
+                }
+            }
+            
             // Transition button click handler
             transitionBtn.addEventListener('click', function() {
                 const targetTag = transitionTag.value;
@@ -247,18 +256,11 @@
                     
                     // Start target tag videos if they're not playing
                     if (video.tag === targetTag && !video.isPlaying) {
-                        const iframe = document.getElementById(`video-iframe-${video.id}`);
-                        if (iframe && iframe.contentWindow) {
-                            const player = iframe.contentWindow.document.querySelector('video');
-                            if (player) {
-                                player.play();
-                                video.isPlaying = true;
-                                video.volume = 0; // Start at 0 volume
-                                document.getElementById(`volume-${video.id}`).value = 0;
-                                document.getElementById(`volume-value-${video.id}`).textContent = '0';
-                                player.volume = 0;
-                            }
-                        }
+                        video.isPlaying = true;
+                        video.volume = 0; // Start at 0 volume
+                        document.getElementById(`volume-${video.id}`).value = 0;
+                        document.getElementById(`volume-value-${video.id}`).textContent = '0';
+                        setVolume(video.id, 0);
                     }
                 });
                 
@@ -268,31 +270,27 @@
                     const progress = Math.min(1, (now - startTime) / duration);
                     
                     videos.forEach(video => {
-                        const iframe = document.getElementById(`video-iframe-${video.id}`);
-                        const player = iframe.contentWindow.document.querySelector('video');
+                        let targetVolume;
                         
-                        if (player) {
-                            let targetVolume;
-                            
-                            if (video.tag === targetTag) {
-                                // Fade in from 0 to 100
-                                targetVolume = progress * 100;
-                            } else {
-                                // Fade out from current volume to 0
-                                targetVolume = initialVolumes[video.id] * (1 - progress);
-                            }
-                            
-                            // Update volume in UI and player
-                            video.volume = targetVolume;
-                            document.getElementById(`volume-${video.id}`).value = targetVolume;
-                            document.getElementById(`volume-value-${video.id}`).textContent = Math.round(targetVolume);
-                            player.volume = targetVolume / 100;
-                            
-                            // Pause if volume reaches 0
-                            if (targetVolume <= 0 && video.isPlaying) {
-                                player.pause();
-                                video.isPlaying = false;
-                            }
+                        if (video.tag === targetTag) {
+                            // Fade in from 0 to 100
+                            targetVolume = progress * 100;
+                        } else {
+                            // Fade out from current volume to 0
+                            targetVolume = initialVolumes[video.id] * (1 - progress);
+                        }
+                        
+                        // Update volume in UI and player
+                        video.volume = targetVolume;
+                        document.getElementById(`volume-${video.id}`).value = targetVolume;
+                        document.getElementById(`volume-value-${video.id}`).textContent = Math.round(targetVolume);
+                        setVolume(video.id, Math.round(targetVolume));
+                        
+                        // Update play state
+                        if (targetVolume <= 0 && video.isPlaying) {
+                            video.isPlaying = false;
+                        } else if (targetVolume > 0 && !video.isPlaying) {
+                            video.isPlaying = true;
                         }
                     });
                     
@@ -326,7 +324,11 @@
                     container.innerHTML = `
                         <div class="video-wrapper">
                             <div class="video-preview">
-                                <iframe id="video-iframe-${video.id}" src="https://www.youtube.com/embed/${video.videoId}?enablejsapi=1&origin=${window.location.origin}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                                <iframe id="video-iframe-${video.id}" 
+                                        src="https://www.youtube.com/embed/${video.videoId}?enablejsapi=1&controls=0" 
+                                        frameborder="0" 
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                        allowfullscreen></iframe>
                             </div>
                             <div class="video-controls">
                                 <div>
@@ -352,22 +354,7 @@
                         video.volume = volume;
                         video.isPlaying = volume > 0;
                         saveVideos();
-                        
-                        // Update YouTube player volume if available
-                        const iframe = document.getElementById(`video-iframe-${video.id}`);
-                        if (iframe && iframe.contentWindow) {
-                            const player = iframe.contentWindow.document.querySelector('video');
-                            if (player) {
-                                player.volume = volume / 100;
-                                if (volume > 0 && !video.isPlaying) {
-                                    player.play();
-                                    video.isPlaying = true;
-                                } else if (volume <= 0 && video.isPlaying) {
-                                    player.pause();
-                                    video.isPlaying = false;
-                                }
-                            }
-                        }
+                        setVolume(video.id, volume);
                     });
                 });
                 
@@ -390,26 +377,6 @@
             // Initial render
             renderVideos();
             updateTransitionText();
-            
-            // Periodically check for YouTube players to set their initial volumes
-            setInterval(() => {
-                videos.forEach(video => {
-                    const iframe = document.getElementById(`video-iframe-${video.id}`);
-                    if (iframe && iframe.contentWindow) {
-                        const player = iframe.contentWindow.document.querySelector('video');
-                        if (player) {
-                            player.volume = video.volume / 100;
-                            if (video.volume > 0 && !video.isPlaying) {
-                                player.play();
-                                video.isPlaying = true;
-                            } else if (video.volume <= 0 && video.isPlaying) {
-                                player.pause();
-                                video.isPlaying = false;
-                            }
-                        }
-                    }
-                });
-            }, 1000);
         });
     </script>
 </body>
